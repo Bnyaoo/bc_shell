@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <sys/file.h>
+#include <ctype.h>
 
 char* find_command_path(const char* command);
 int execute_command(const char* path, char* const args[]);
@@ -11,6 +12,8 @@ void cd_builtin(const char* path);
 int execute_command_redirection(const char* command, char* const args[], const char* output_file, const char* error_file, int output_append, int error_append);
 char* get_filename_ext(const char *filename);
 char* remove_special_characters(char *filename);
+char* get_home(char *filename);
+char* get_special_chars(const char* str);
 
 int main() {
     char input[100];
@@ -56,6 +59,11 @@ int main() {
                 if (strcmp(token, ">") == 0) {
                     token = strtok(NULL, " ");
                     output_file = token;
+                    char* home = get_special_chars(output_file);
+                    if (strcmp(home, "~/") == 0) {
+                        output_file = get_home(output_file);
+                        chdir(getenv("HOME")); // go to the home directory
+                    }
                     status = 0;
                     break;
                 }
@@ -63,6 +71,11 @@ int main() {
                 else if (strcmp(token, ">>") == 0) {
                     token = strtok(NULL, " ");
                     output_file = token;
+                    char* home = get_special_chars(output_file);
+                    if (strcmp(home, "~/") == 0) {
+                        output_file = get_home(output_file);
+                        chdir(getenv("HOME")); // go to the home directory
+                    }
                     status = 1;
                     break;
                 } else if (strcmp(token, "2>") == 0) {
@@ -100,6 +113,7 @@ int main() {
 }
 
 char* find_command_path(const char* command) {
+
     char* path_env = getenv("PATH"); // gets the PATH environment variable
     char* path = strdup(path_env); // creates a copy of the PATH variable
     char* current_path = strtok(path, ":"); // tokenizes the PATH variable by ':'
@@ -126,6 +140,7 @@ char* find_command_path(const char* command) {
 }
 
 int execute_command(const char* path, char* const args[]) {
+
     if (path == NULL) {
         return -1;
     }
@@ -181,57 +196,10 @@ void cd_builtin(const char* path) {
     }
 }
 
-//int execute_command_redirection(const char* command, char* const args[], const char* output_file, int append) {
-//    int output_fd;
-//    pid_t pid;
-//    int status;
-//    // Open output file for writing
-//    if (output_file != NULL) {
-//        if(append){
-//            output_fd = open(output_file, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
-//        }
-//        else{
-//            output_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-//        }
-//        if (output_fd == -1) {
-//            printf("Error: Unable to open output file %s\n", output_file);
-//            return -1;
-//        }
-//    }
-//    pid = fork();
-//    if (pid == 0) {
-//        if (output_file != NULL) {
-//            dup2(output_fd, 1); // redirect stdout to the output file
-//        }
-//        execv(command, args);
-//        _exit(1);
-//    }
-//    else if (pid > 0) {
-//        wait(&status);
-//    }
-//    else {
-//        printf("Error: Unable to fork a new process\n");
-//        return -1;
-//    }
-//    if (output_file != NULL) {
-//        close(output_fd);
-//    }
-//    return 0;
-//}
-
 int execute_command_redirection(const char* command, char* const args[], const char* output_file, const char* error_file, int output_append, int error_append) {
     int output_fd, error_fd;
     pid_t pid;
     int status;
-    char* raw_file_name;
-    for (int i = sizeof(output_file); i > 0; i--) {
-        if (strchr(&output_file[i], '/') == 0){
-            cd_builtin("~");
-            raw_file_name = remove_special_characters((char*)output_file);
-            output_file = raw_file_name;
-            break;
-        }
-    }
     // Open output file for writing
     if (output_file != NULL) {
         if(output_append){
@@ -307,5 +275,40 @@ char* remove_special_characters(char *filename) {
 
     return filename;
 }
+
+char* get_home(char *filename) {
+    for (int i = 0, j; filename[i] != '\0'; ++i) {
+
+        // enter the loop if the character is not an alphabet
+        // and not the null character
+        while ((filename[i] == '~' || filename[i] == '/') &&
+               filename[i] != '\0') {
+            for (j = i; filename[j] != '\0'; ++j) {
+
+                // if jth element of line is not an alphabet,
+                // assign the value of (j+1)th element to the jth element
+                filename[j] = filename[j + 1];
+            }
+            filename[j] = '\0';
+        }
+    }
+
+    return filename;
+}
+
+char* get_special_chars(const char* str) {
+    int len = strlen(str);
+    char* special_chars = malloc(len + 1);
+    int index = 0;
+    for (int i = 0; i < len; i++) {
+        if (!isalnum(str[i]) && str[i] != '.') {
+            special_chars[index++] = str[i];
+        }
+    }
+    special_chars[index] = '\0';
+    return special_chars;
+}
+
+
 
 
